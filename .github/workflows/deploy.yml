@@ -30,6 +30,7 @@ jobs:
           test -s public/index.html
           test -s public/assets/app.js
           test -s public/snapshot.js
+          cp config.js public/config.js
           test "$(find public/assets -name 'card-*-part-*.png' | wc -l)" -eq 33
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

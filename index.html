@@ -55,7 +55,7 @@ const script=(txt)=>{const s=document.createElement('script');s.textContent=txt;
 const decoded=(file)=>{const x=files.get(file);if(!x)throw Error('Thiếu tệp '+file);return decoder.decode(x)};
 const style=document.createElement('style');style.textContent=decoded('assets/app.css');document.head.appendChild(style);
 script(decoded('snapshot.js'));
-script(decoded('config.js'));
+const configResponse=await fetch('config.js',{cache:'no-store'}).catch(()=>null);script(configResponse?.ok ? await configResponse.text() : decoded('config.js'));
 if(!window.APTIS_DATA?.cards?.length)throw Error('Không tìm thấy ngân hàng đề');
 for(const card of window.APTIS_DATA.cards){
  for(const [key,path] of Object.entries(card.images||{})){
