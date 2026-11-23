@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#101d35"/><title>Aptis Speaking Studio — Thi thử và luyện nói</title>
+<style>
+body{margin:0;background:#eef3fa;color:#172542;font:16px system-ui,Segoe UI,Arial,sans-serif}
+#loading{max-width:650px;margin:12vh auto;padding:35px;border-radius:20px;background:white;box-shadow:0 8px 45px #253e5814}
+h1{font-size:27px}p{line-height:1.6}progress{width:100%;height:13px;accent-color:#356ad7}
+small{color:#687991}a{color:#2860b0}
+</style></head>
+<body><div id="loading"><h1>Aptis Speaking Studio</h1><p id="message">Đang tải bộ đề, đáp án mẫu và 33 hình ảnh…</p><progress id="progress" max="14" value="0"></progress><p><small>Đây là trang luyện thi Aptis không chính thức. Lần tải đầu cần khoảng 14 MB dữ liệu.</small></p></div>
+<div id="app" hidden></div>
+<script>
+(async()=>{
+const message=document.getElementById('message'),bar=document.getElementById('progress');
+try{
+const count=14,parts=new Array(count);
+let next=0,done=0;
+async function worker(){
+ while(next<count){
+  const i=next++;
+  const r=await fetch('bundle/part-'+String(i).padStart(2,'0')+'.bin');
+  if(!r.ok)throw Error('Không tải được gói dữ liệu '+(i+1)+' (HTTP '+r.status+')');
+  parts[i]=new Uint8Array(await r.arrayBuffer());
+  bar.value=++done;
+  message.textContent='Đang tải dữ liệu: '+done+'/'+count+' gói…';
+ }
+}
+await Promise.all(Array.from({length:Math.min(4,count)},worker));
+const total=parts.reduce((s,x)=>s+x.length,0);const bytes=new Uint8Array(total);let offset=0;
+for(const p of parts){bytes.set(p,offset);offset+=p.length}
+const dv=new DataView(bytes.buffer),u16=p=>dv.getUint16(p,true),u32=p=>dv.getUint32(p,true);
+let end=-1;for(let i=bytes.length-22;i>=Math.max(0,bytes.length-66000);i--){if(u32(i)===0x06054b50){end=i;break}}
+if(end<0)throw Error('Gói đề bị lỗi: không tìm thấy thư mục ZIP');
+const entries=u16(end+10),directory=u32(end+16);
+const files=new Map(),decoder=new TextDecoder();
+message.textContent='Đang giải nén 33 hình ảnh và bộ đề…';
+for(let i=0,p=directory;i<entries;i++){
+ if(u32(p)!==0x02014b50)throw Error('Mục lục gói đề không hợp lệ');
+ const method=u16(p+10),packed=u32(p+20),nameLen=u16(p+28),extraLen=u16(p+30),commentLen=u16(p+32),local=u32(p+42);
+ const name=decoder.decode(bytes.subarray(p+46,p+46+nameLen));
+ if(u32(local)!==0x04034b50)throw Error('Tệp nén bị lỗi');
+ const start=local+30+u16(local+26)+u16(local+28);
+ const binary=bytes.subarray(start,start+packed);
+ let raw;
+ if(method===0)raw=new Uint8Array(binary);
+ else if(method===8){
+  if(!('DecompressionStream' in window))throw Error('Trình duyệt chưa hỗ trợ giải nén, vui lòng sử dụng Chrome hoặc Edge phiên bản mới');
+  const stream=new Blob([binary]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  raw=new Uint8Array(await new Response(stream).arrayBuffer());
+ }else throw Error('Không hỗ trợ định dạng ZIP: '+method);
+ files.set(name,raw);
+ p+=46+nameLen+extraLen+commentLen;
+}
+const script=(txt)=>{const s=document.createElement('script');s.textContent=txt;document.body.appendChild(s)};
+const decoded=(file)=>{const x=files.get(file);if(!x)throw Error('Thiếu tệp '+file);return decoder.decode(x)};
+const style=document.createElement('style');style.textContent=decoded('assets/app.css');document.head.appendChild(style);
+script(decoded('snapshot.js'));
+script(decoded('config.js'));
+if(!window.APTIS_DATA?.cards?.length)throw Error('Không tìm thấy ngân hàng đề');
+for(const card of window.APTIS_DATA.cards){
+ for(const [key,path] of Object.entries(card.images||{})){
+  const content=files.get(path);
+  if(content)card.images[key]=URL.createObjectURL(new Blob([content],{type:'image/png'}));
+ }
+}
+document.getElementById('loading').remove();
+document.getElementById('app').hidden=false;
+script(decoded('assets/app.js'));
+}catch(e){
+ message.textContent='Không thể mở website: '+e.message;
+ document.getElementById('progress').hidden=true;
+ const p=document.createElement('p');p.textContent='Hãy tải lại trang. Nếu lỗi tiếp diễn, thử Chrome/Edge phiên bản mới hoặc tải bộ đề offline từ GitHub.';document.getElementById('loading').appendChild(p);
+ console.error(e);
+}
+})();
+</script></body></html>
