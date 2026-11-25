@@ -31,6 +31,27 @@ jobs:
           test -s public/assets/app.js
           test -s public/snapshot.js
           cp config.js public/config.js
+          # Add a separate 3-second reading phase before every timed step.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("public/assets/app.js")
+          s=p.read_text(encoding="utf-8")
+          def swap(old,new):
+              global s
+              if s.count(old)!=1: raise RuntimeError('Unexpected source: '+old[:100])
+              s=s.replace(old,new,1)
+          swap('paused:false,transitioning:false,stream:null','paused:false,reading:false,transitioning:false,stream:null')
+          swap("${isPrep?'CHUẨN BỊ':'CÒN LẠI'}", "${state.reading?'SẮP BẮT ĐẦU':isPrep?'CHUẨN BỊ':'CÒN LẠI'}")
+          swap("${!isPrep?`<div class=\"record-badge\"><span class=\"dot\"></span> ${state.stream?'ĐANG GHI ÂM':'ĐANG ĐẾM GIỜ (KHÔNG MIC)'}</div>`:''}", "${state.reading?'<div class=\"smallpill\" id=\"read-count\" role=\"status\">Bắt đầu sau 3 giây</div>':!isPrep?`<div class=\"record-badge\"><span class=\"dot\"></span> ${state.recorder?'ĐANG GHI ÂM':'ĐANG ĐẾM GIỜ (KHÔNG MIC)'}</div>`:''}")
+          swap("${isPrep?'Thời gian chuẩn bị':state.paused?'Đã tạm dừng':'Thời gian trả lời'}", "${state.reading?'Đọc câu hỏi trước khi bắt đầu':isPrep?'Thời gian chuẩn bị':state.paused?'Đã tạm dừng':'Thời gian trả lời'}")
+          swap("${isPrep?'Hãy đọc cả ba câu hỏi, ghi ý chính ngắn gọn.","${state.reading?'Bạn có 3 giây đọc đề. Thời gian này không tính vào lượt trả lời.':isPrep?'Hãy đọc cả ba câu hỏi, ghi ý chính ngắn gọn.")
+          swap('data-action="pause">${state.paused?', 'data-action="pause" ${state.reading?\'disabled\':\'\'}>${state.paused?')
+          swap("state.recordStarted=Date.now();state.recorder=null;render();if(s.kind==='record'&&state.stream)","state.recorder=null;state.reading=true;clearTick();state.deadline=Date.now()+3000;render();state.tickId=setInterval(()=>{if(state.status!=='running'||state.transitioning||!state.reading)return;const left=Math.max(0,state.deadline-Date.now());const label=$('read-count');if(label)label.textContent='Bắt đầu sau '+Math.ceil(left/1000)+' giây';if(left<=0){clearTick();beginTimedStep();}},100);}\nfunction beginTimedStep(){if(state.status!=='running'||state.transitioning||!state.reading)return;const s=step();if(!s)return;state.reading=false;state.recordStarted=Date.now();if(s.kind==='record'&&state.stream)")
+          swap("render();}}clockStart();}","render();}}render();clockStart();}")
+          swap("if(state.status!=='running'||state.mode!=='practice')return;", "if(state.status!=='running'||state.mode!=='practice'||state.reading||state.transitioning)return;")
+          p.write_text(s,encoding='utf-8')
+          PY
+          node --check public/assets/app.js
           test "$(find public/assets -name 'card-*-part-*.png' | wc -l)" -eq 33
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
